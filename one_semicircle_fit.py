@@ -8,7 +8,7 @@ from scipy.optimize import least_squares
 
 
 # --------------------------------------------------
-# Find all CSV files in the repository
+# Find all CSV files
 # --------------------------------------------------
 
 csv_files = [
@@ -18,7 +18,7 @@ csv_files = [
 
 if len(csv_files) == 0:
     raise FileNotFoundError(
-        "No CSV files found. Please upload your separate CSV files."
+        "No CSV files found. Please upload your CSV files."
     )
 
 print("CSV files found:")
@@ -27,21 +27,31 @@ for f in csv_files:
 
 
 # --------------------------------------------------
-# Model: Rs + (Rct || Cdl)
+# Model:
+# Rs + (Rct || CPE)
+#
+# Z_CPE = 1 / (Q * (j*w)^n)
 # --------------------------------------------------
 
 def impedance_model(params, frequency):
-    Rs, Rct, Cdl = np.exp(params)
+
+    Rs, Rct, Q, n = np.exp(params)
 
     omega = 2 * np.pi * frequency
 
-    Z_parallel = Rct / (1 + 1j * omega * Rct * Cdl)
+    Z_cpe = 1 / (
+        Q * (1j * omega) ** n
+    )
+
+    Z_parallel = 1 / (
+        1 / Rct + 1 / Z_cpe
+    )
 
     return Rs + Z_parallel
 
 
 # --------------------------------------------------
-# Fit one file
+# Fit one CSV file
 # --------------------------------------------------
 
 def fit_one_file(filename):
@@ -93,7 +103,32 @@ def fit_one_file(filename):
 
     Z_exp = Zre + 1j * Zim
 
+    # ----------------------------------------------
+    # Initial parameter estimates
+    # ----------------------------------------------
+
+    Rs_initial = max(0.1, np.min(Zre))
+    Rct_initial = max(1.0, np.max(Zre) - np.min(Zre))
+
+    # Initial CPE parameter
+    Q_initial = 1e-4
+
+    # n is constrained indirectly through bounds
+    n_initial = 0.85
+
+    initial_params = np.log([
+        Rs_initial,
+        Rct_initial,
+        Q_initial,
+        n_initial
+    ])
+
+    # ----------------------------------------------
+    # Residual function
+    # ----------------------------------------------
+
     def residuals(params):
+
         Z_fit = impedance_model(params, frequency)
 
         return np.concatenate([
@@ -101,57 +136,88 @@ def fit_one_file(filename):
             Z_fit.imag - Z_exp.imag
         ])
 
-    Rs_initial = max(0.1, np.min(Zre))
-    Rct_initial = max(1.0, np.max(Zre) - np.min(Zre))
-    Cdl_initial = 1e-5
+    # ----------------------------------------------
+    # Bounds
+    #
+    # Rs > 0
+    # Rct > 0
+    # Q > 0
+    # 0.1 <= n <= 1.0
+    # ----------------------------------------------
 
-    initial_params = np.log([
-        Rs_initial,
-        Rct_initial,
-        Cdl_initial
+    lower_bounds = np.log([
+        1e-6,
+        1e-6,
+        1e-12,
+        0.1
+    ])
+
+    upper_bounds = np.log([
+        1e9,
+        1e9,
+        1e3,
+        1.0
     ])
 
     result = least_squares(
         residuals,
         initial_params,
-        max_nfev=10000
+        bounds=(lower_bounds, upper_bounds),
+        max_nfev=30000
     )
 
-    Rs, Rct, Cdl = np.exp(result.x)
+    Rs, Rct, Q, n = np.exp(result.x)
 
     Z_fit = impedance_model(result.x, frequency)
 
-    tau = Rct * Cdl
-    fmax = 1 / (2 * np.pi * tau)
+    # ----------------------------------------------
+    # Calculate fit indicators
+    # ----------------------------------------------
+
+    tau_approx = (
+        Rct * Q
+    ) ** (1 / n)
+
+    fmax_approx = 1 / (
+        2 * np.pi * tau_approx
+    )
 
     rmse = np.sqrt(
         np.mean(np.abs(Z_fit - Z_exp) ** 2)
     )
 
-    ss_res = np.sum(np.abs(Z_exp - Z_fit) ** 2)
+    ss_res = np.sum(
+        np.abs(Z_exp - Z_fit) ** 2
+    )
+
     ss_tot = np.sum(
         np.abs(Z_exp - np.mean(Z_exp)) ** 2
     )
 
     r_squared = 1 - ss_res / ss_tot
 
-    print(f"Rs      = {Rs:.6g} ohm")
-    print(f"Rct     = {Rct:.6g} ohm")
-    print(f"Cdl     = {Cdl:.6g} F")
-    print(f"tau     = {tau:.6g} s")
-    print(f"fmax    = {fmax:.6g} Hz")
-    print(f"RMSE    = {rmse:.6g} ohm")
-    print(f"R²      = {r_squared:.6f}")
+    print(f"Rs          = {Rs:.6g} ohm")
+    print(f"Rct         = {Rct:.6g} ohm")
+    print(f"Q           = {Q:.6g}")
+    print(f"n           = {n:.6f}")
+    print(f"tau_approx   = {tau_approx:.6g} s")
+    print(f"fmax_approx  = {fmax_approx:.6g} Hz")
+    print(f"RMSE        = {rmse:.6g} ohm")
+    print(f"R²          = {r_squared:.6f}")
     print("Fit success:", result.success)
 
-    os.makedirs("fit_plots", exist_ok=True)
+    # ----------------------------------------------
+    # Save plot
+    # ----------------------------------------------
+
+    os.makedirs("fit_plots_cpe", exist_ok=True)
 
     plot_name = os.path.splitext(
         os.path.basename(filename)
-    )[0] + "_fit.png"
+    )[0] + "_CPE_fit.png"
 
     plot_path = os.path.join(
-        "fit_plots",
+        "fit_plots_cpe",
         plot_name
     )
 
@@ -166,7 +232,8 @@ def fit_one_file(filename):
     plt.plot(
         Z_fit.real,
         -Z_fit.imag,
-        label="Single-semicircle fit"
+        linewidth=2,
+        label="Single semicircle + CPE fit"
     )
 
     plt.xlabel("Z′ (ohm)")
@@ -183,9 +250,10 @@ def fit_one_file(filename):
         "file": filename,
         "Rs_ohm": Rs,
         "Rct_ohm": Rct,
-        "Cdl_F": Cdl,
-        "tau_s": tau,
-        "fmax_Hz": fmax,
+        "Q_CPE": Q,
+        "n_CPE": n,
+        "tau_approx_s": tau_approx,
+        "fmax_approx_Hz": fmax_approx,
         "RMSE_ohm": rmse,
         "R_squared": r_squared,
         "fit_success": result.success
@@ -199,9 +267,14 @@ def fit_one_file(filename):
 results = []
 
 for filename in csv_files:
+
     try:
-        results.append(fit_one_file(filename))
+        results.append(
+            fit_one_file(filename)
+        )
+
     except Exception as error:
+
         print("\nERROR processing", filename)
         print(error)
 
@@ -211,16 +284,23 @@ for filename in csv_files:
 # --------------------------------------------------
 
 if results:
+
     summary = pd.DataFrame(results)
 
     summary.to_csv(
-        "fit_results_summary.csv",
+        "fit_results_summary_CPE.csv",
         index=False
     )
 
     print("\n" + "=" * 60)
     print("Finished.")
-    print("Results saved to: fit_results_summary.csv")
-    print("Plots saved to: fit_plots/")
+    print(
+        "Results saved to: fit_results_summary_CPE.csv"
+    )
+    print(
+        "Plots saved to: fit_plots_cpe/"
+    )
+
 else:
+
     print("No files were successfully fitted.")
