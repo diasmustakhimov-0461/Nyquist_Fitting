@@ -292,9 +292,44 @@ plt.tight_layout()
 # 11. SAVE PLOT
 # ============================================================
 
-output_plot = "two_time_constants_fit.png"
-plt.savefig(output_plot, dpi=300)
-plt.show()
+results = {
+    "file": filename,
 
-print()
-print(f"Plot saved to: {output_plot}")
+    # Series resistance
+    "Rs_ohm": Rs,
+
+    # First time constant
+    "R1_ohm": R1,
+    "Q1_CPE": Q1,
+    "n1_CPE": n1,
+    "tau1_s": tau1,
+    "fmax1_Hz": fmax1,
+
+    # Second time constant
+    "R2_ohm": R2,
+    "Q2_CPE": Q2,
+    "n2_CPE": n2,
+    "tau2_s": tau2,
+    "fmax2_Hz": fmax2,
+
+    # Fitting quality
+    "RMSE_ohm": RMSE,
+    "R_squared": R_squared,
+    "fit_success": result.success
+}
+
+summary = pd.DataFrame([results])
+
+summary.to_csv(
+    "fit_results_two_time_constants.csv",
+    index=False
+)
+
+print("\n" + "=" * 60)
+print("Finished.")
+print(
+    "Results saved to: fit_results_two_time_constants.csv"
+)
+print(
+    "Plot saved to: two_time_constants_fit.png"
+)
