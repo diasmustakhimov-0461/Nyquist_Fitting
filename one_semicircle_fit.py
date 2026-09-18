@@ -24,16 +24,21 @@ if not os.path.exists(filename):
         "Please place the CSV file in the same folder as this script."
     )
 
-df = pd.read_csv(filename)
+df = pd.read_csv(
+    filename,
+    sep=";",
+    skiprows=1,
+    decimal=","
+)
 
 print("\nColumn names found in your file:")
 print(df.columns.tolist())
 
 # IMPORTANT:
 # Change these three names to match your CSV columns.
-frequency = df["Frequency_Hz"].to_numpy(dtype=float)
-Zre_exp = df["Zreal_Ohm"].to_numpy(dtype=float)
-Zim_exp = df["Zimag_Ohm"].to_numpy(dtype=float)
+frequency = df["Frequency (Hz)"].to_numpy(dtype=float)
+Zre_exp = df["Zre (ohms)"].to_numpy(dtype=float)
+Zim_exp = df["Zim (ohms)"].to_numpy(dtype=float)
 
 # Remove rows containing invalid values
 valid = np.isfinite(frequency) & np.isfinite(Zre_exp) & np.isfinite(Zim_exp)
