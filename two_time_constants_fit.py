@@ -420,7 +420,8 @@ print(
 )
 
 print(
-    f"Individual plots saved in folder: {plot_folder}"
+    f"Individual plots saved in folder: {pl
+ot_folder}"
 )
 
 print("\nSummary table:")
