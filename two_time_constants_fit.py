@@ -13,7 +13,9 @@ from scipy.optimize import least_squares
 filenames = [
     "LDH-M3-3-18h-DS (96 hours).csv",
     "LDH-M3-3-18h-DS (168 hours).csv",
-    "LDH-M3-3-18h-DS (48 hours).csv"
+    "LDH-M3-3-18h-DS (48 hours).csv",
+    "LDH-M3-3-18h-DS (1 hours).csv",
+    "LDH-M2-6-DS (96 hours).csv"
 ]
 
 # List for storing results from all files
@@ -420,8 +422,7 @@ print(
 )
 
 print(
-    f"Individual plots saved in folder: {pl
-ot_folder}"
+    f"Individual plots saved in folder: {plot_folder}"
 )
 
 print("\nSummary table:")
